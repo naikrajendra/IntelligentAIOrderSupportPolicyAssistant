@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: IntelligentAIOrderSupportPolicyAssistant
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/orderdb}
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4o-mini}
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  policies:
+    pdf-directory: ${POLICY_PDF_DIRECTORY:./policies}
