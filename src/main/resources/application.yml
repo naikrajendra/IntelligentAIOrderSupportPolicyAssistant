@@ -18,3 +18,5 @@ server:
 app:
   policies:
     pdf-directory: ${POLICY_PDF_DIRECTORY:./policies}
+  mcp:
+    api-key: ${MCP_API_KEY:}
