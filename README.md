@@ -53,6 +53,10 @@ The API will be available at:
 
 - `http://localhost:8080`
 
+Web UI:
+
+- `http://localhost:8080/`
+
 ## Load Policy Files (RAG Ingestion)
 
 This endpoint scans a directory and ingests supported policy files:
@@ -93,7 +97,8 @@ Request payload:
 {
   "customerId": "C-991",
   "orderId": "O-1001",
-  "question": "My order is delayed. Can I get shipping fee refund or compensation?"
+  "question": "My order is delayed. Can I get shipping fee refund or compensation?",
+  "confirmCancellation": false
 }
 ```
 
@@ -104,6 +109,7 @@ $body = @{
   customerId = "C-991"
   orderId    = "O-1001"
   question   = "My order is delayed. Can I get shipping fee refund or compensation?"
+  confirmCancellation = $false
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post `
@@ -117,6 +123,23 @@ Example response shape:
 ```json
 {
   "answer": "...assistant response..."
+}
+```
+
+Cancellation safety behavior:
+
+- The assistant does not execute cancellation automatically.
+- It checks order status and policy context first.
+- It only executes `cancelOrder` when explicit confirmation is provided.
+
+To explicitly confirm cancellation, send:
+
+```json
+{
+  "customerId": "C-991",
+  "orderId": "O-1001",
+  "question": "Please cancel this order. I confirm cancellation.",
+  "confirmCancellation": true
 }
 ```
 

@@ -25,36 +25,46 @@ public class OrderSupportService {
         String safeCustomerId = safe(request.customerId());
         String safeOrderId = safe(request.orderId());
         String safeQuestion = safe(request.question());
+        boolean cancellationRequested = isCancellationIntent(safeQuestion);
+        boolean explicitConfirmationProvided = Boolean.TRUE.equals(request.confirmCancellation())
+                || hasExplicitCancellationConfirmation(safeQuestion);
 
         Map<String, Object> statusToolResult = internalMcpToolClient.getOrderStatus(safeOrderId);
         String orderSnapshot = formatOrderToolResult(statusToolResult);
 
         String cancelToolResult = "No cancellation requested.";
-        if (shouldAttemptCancel(safeQuestion)) {
+        if (cancellationRequested && explicitConfirmationProvided) {
             Map<String, Object> cancellation = internalMcpToolClient.cancelOrder(safeOrderId);
             cancelToolResult = cancellation.toString();
+        } else if (cancellationRequested) {
+            cancelToolResult = "Cancellation not executed. Explicit confirmation is required before any cancellation action.";
         }
 
         String policyContext = policyChunkSearchService.fetchPolicyContext(safeQuestion);
 
         String prompt = """
-                You are an Intelligent Order Support and Policy Assistant.
+            You are the Order Support Assistant for business teams.
 
                 Goals:
-                1) Help with complex order inquiries.
-                2) Use order details to give accurate support.
-                3) Apply company policies and return rules when recommending next actions.
+            1) Help business users handle order inquiries quickly.
+            2) Use order details to provide accurate updates and decisions.
+            3) Apply company policies and return rules when recommending next actions.
 
                 Important rules:
                 - If policy details are missing, say what is missing.
                 - If order data is incomplete, ask for the missing fields.
                 - Be explicit when recommending refunds, vouchers, or escalation.
-                - Keep the response concise and customer-friendly.
+                - Never execute cancellation unless explicit confirmation is provided.
+                - For cancellation requests without explicit confirmation, check policies and ask for confirmation first.
+            - Write in plain business language for non-technical users.
+            - Avoid engineering jargon, API references, or internal implementation details.
+            - Keep the response concise, practical, and action-oriented.
 
                 Context:
                 customerId: %s
                 orderId: %s
                 customerQuestion: %s
+                explicitConfirmationProvided: %s
                 orderStatusToolResult: %s
                 orderCancelToolResult: %s
                 policyContextChunks: %s
@@ -62,6 +72,7 @@ public class OrderSupportService {
                 safeCustomerId,
                 safeOrderId,
                 safeQuestion,
+                explicitConfirmationProvided,
                 orderSnapshot,
                 cancelToolResult,
                 policyContext
@@ -77,9 +88,18 @@ public class OrderSupportService {
         return value == null || value.isBlank() ? "unknown" : value;
     }
 
-    private boolean shouldAttemptCancel(String question) {
+    private boolean isCancellationIntent(String question) {
         String normalized = question.toLowerCase();
         return normalized.contains("cancel") || normalized.contains("cancellation");
+    }
+
+    private boolean hasExplicitCancellationConfirmation(String question) {
+        String normalized = question.toLowerCase();
+        return normalized.contains("confirm cancellation")
+                || normalized.contains("i confirm")
+                || normalized.contains("proceed with cancellation")
+                || normalized.contains("yes cancel")
+                || normalized.contains("cancel it now");
     }
 
     private String formatOrderToolResult(Map<String, Object> toolResult) {

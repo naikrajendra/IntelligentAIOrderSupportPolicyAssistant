@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Support Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page-bg" aria-hidden="true">
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <main class="layout">
+    <section class="left-panel card elevate-in">
+      <header class="brand-block">
+        <p class="eyebrow">Internal Console</p>
+        <h1>Order Support Assistant</h1>
+        <p class="subtext">Policy-aware responses powered by your order database and internal MCP tools.</p>
+      </header>
+
+      <div class="actions">
+        <button id="seedOrdersBtn" class="btn btn-secondary" type="button">Seed Default Orders</button>
+        <button id="ingestPoliciesBtn" class="btn btn-secondary" type="button">Ingest Policies</button>
+      </div>
+
+      <div class="status-block" id="statusBlock" role="status" aria-live="polite">
+        Ready.
+      </div>
+
+      <div class="hints">
+        <h2>Try these prompts</h2>
+        <button class="chip" type="button" data-question="Where is my order and what is the latest delivery status?">Track order and delivery status</button>
+        <button class="chip" type="button" data-question="Can I cancel this order now?">Check cancellation eligibility</button>
+        <button class="chip" type="button" data-question="If delivery is delayed, what policy-based support can I offer?">Policy guidance for delays</button>
+      </div>
+    </section>
+
+    <section class="chat-panel card elevate-in-delayed">
+      <div class="chat-header">
+        <h2>Chat</h2>
+        <p>Connected to <code>/api/support/query</code></p>
+      </div>
+
+      <div id="conversation" class="conversation" aria-live="polite" aria-label="Conversation"></div>
+
+      <form id="chatForm" class="composer" autocomplete="off">
+        <div class="field-row">
+          <label class="field">
+            <span>Customer ID</span>
+            <input id="customerId" name="customerId" value="C-991" required />
+          </label>
+          <label class="field">
+            <span>Order ID</span>
+            <input id="orderId" name="orderId" value="O-1001" required />
+          </label>
+        </div>
+
+        <label class="field field-textarea">
+          <span>Question</span>
+          <textarea id="question" name="question" rows="4" placeholder="Ask a support question..." required></textarea>
+        </label>
+
+        <label class="inline-check" for="confirmCancellation">
+          <input id="confirmCancellation" name="confirmCancellation" type="checkbox" />
+          <span>I explicitly confirm cancellation if this request is asking to cancel the order.</span>
+        </label>
+
+        <div class="composer-footer">
+          <small>Cancellations are blocked unless explicit confirmation is provided.</small>
+          <button class="btn btn-primary" type="submit" id="sendBtn">Send</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <template id="messageTemplate">
+    <article class="message">
+      <p class="role"></p>
+      <p class="text"></p>
+    </article>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
