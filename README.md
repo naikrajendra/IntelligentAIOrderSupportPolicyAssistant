@@ -9,6 +9,7 @@ A Spring Boot assistant that:
 
 - Order support query API: `POST /api/support/query`
 - Policy ingestion API: `POST /api/support/policies/ingest`
+- Internal MCP server API: `POST /api/mcp`
 - Local policy examples in the `policies/` folder
 - Seed order records inserted automatically on first startup
 
@@ -35,6 +36,7 @@ The app reads these environment variables:
 - `OPENAI_MODEL` (default: `gpt-4o-mini`)
 - `SERVER_PORT` (default: `8080`)
 - `POLICY_PDF_DIRECTORY` (default: `./policies`)
+- `MCP_API_KEY` (required for calling `/api/mcp`)
 
 ## Run the Application
 
@@ -43,6 +45,7 @@ PowerShell:
 ```powershell
 $env:MONGODB_URI="mongodb://localhost:27017/orderdb"
 $env:OPENAI_API_KEY="your-openai-api-key"
+$env:MCP_API_KEY="your-internal-mcp-key"
 mvn spring-boot:run
 ```
 
@@ -116,6 +119,129 @@ Example response shape:
   "answer": "...assistant response..."
 }
 ```
+
+## Internal MCP Tools For Transactional Operations
+
+The app includes an internal MCP server that exposes real-time order tools for chatbot use:
+
+- `getOrderStatus(id)`
+- `cancelOrder(id)`
+
+Endpoint:
+
+- `POST /api/mcp`
+- Required header: `X-MCP-API-KEY: <your MCP_API_KEY>`
+
+PowerShell example with header:
+
+```powershell
+$mcpHeaders = @{ "X-MCP-API-KEY" = $env:MCP_API_KEY }
+```
+
+### List tools
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+PowerShell call:
+
+```powershell
+$listBody = @{
+  jsonrpc = "2.0"
+  id      = "1"
+  method  = "tools/list"
+  params  = @{}
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8080/api/mcp" `
+  -Headers $mcpHeaders `
+  -ContentType "application/json" `
+  -Body $listBody
+```
+
+### Call getOrderStatus
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "2",
+  "method": "tools/call",
+  "params": {
+    "name": "getOrderStatus",
+    "arguments": {
+      "id": "O-1001"
+    }
+  }
+}
+```
+
+PowerShell call:
+
+```powershell
+$statusBody = @{
+  jsonrpc = "2.0"
+  id      = "2"
+  method  = "tools/call"
+  params  = @{
+    name      = "getOrderStatus"
+    arguments = @{ id = "O-1001" }
+  }
+} | ConvertTo-Json -Depth 8
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8080/api/mcp" `
+  -Headers $mcpHeaders `
+  -ContentType "application/json" `
+  -Body $statusBody
+```
+
+### Call cancelOrder
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "3",
+  "method": "tools/call",
+  "params": {
+    "name": "cancelOrder",
+    "arguments": {
+      "id": "O-1001"
+    }
+  }
+}
+```
+
+PowerShell call:
+
+```powershell
+$cancelBody = @{
+  jsonrpc = "2.0"
+  id      = "3"
+  method  = "tools/call"
+  params  = @{
+    name      = "cancelOrder"
+    arguments = @{ id = "O-1001" }
+  }
+} | ConvertTo-Json -Depth 8
+
+Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8080/api/mcp" `
+  -Headers $mcpHeaders `
+  -ContentType "application/json" `
+  -Body $cancelBody
+```
+
+Notes:
+
+- The chatbot automatically invokes `getOrderStatus` for each support question.
+- If the question includes words like "cancel" or "cancellation", the chatbot also invokes `cancelOrder`.
 
 ## Seed Data Included
 

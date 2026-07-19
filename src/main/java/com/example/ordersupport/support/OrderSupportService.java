@@ -1,5 +1,6 @@
 package com.example.ordersupport.support;
 
+import java.util.Map;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
@@ -7,16 +8,16 @@ import org.springframework.stereotype.Service;
 public class OrderSupportService {
 
     private final ChatClient chatClient;
-    private final OrderRepository orderRepository;
+    private final InternalMcpToolClient internalMcpToolClient;
     private final PolicyChunkSearchService policyChunkSearchService;
 
     public OrderSupportService(
             ChatClient.Builder chatClientBuilder,
-            OrderRepository orderRepository,
+            InternalMcpToolClient internalMcpToolClient,
             PolicyChunkSearchService policyChunkSearchService
     ) {
         this.chatClient = chatClientBuilder.build();
-        this.orderRepository = orderRepository;
+        this.internalMcpToolClient = internalMcpToolClient;
         this.policyChunkSearchService = policyChunkSearchService;
     }
 
@@ -25,9 +26,14 @@ public class OrderSupportService {
         String safeOrderId = safe(request.orderId());
         String safeQuestion = safe(request.question());
 
-        String orderSnapshot = orderRepository.findByCustomerIdAndOrderId(safeCustomerId, safeOrderId)
-                .map(this::formatOrderSnapshot)
-            .orElse("Order not found in transactional database for provided customerId + orderId.");
+        Map<String, Object> statusToolResult = internalMcpToolClient.getOrderStatus(safeOrderId);
+        String orderSnapshot = formatOrderToolResult(statusToolResult);
+
+        String cancelToolResult = "No cancellation requested.";
+        if (shouldAttemptCancel(safeQuestion)) {
+            Map<String, Object> cancellation = internalMcpToolClient.cancelOrder(safeOrderId);
+            cancelToolResult = cancellation.toString();
+        }
 
         String policyContext = policyChunkSearchService.fetchPolicyContext(safeQuestion);
 
@@ -49,13 +55,15 @@ public class OrderSupportService {
                 customerId: %s
                 orderId: %s
                 customerQuestion: %s
-                orderSnapshot: %s
+                orderStatusToolResult: %s
+                orderCancelToolResult: %s
                 policyContextChunks: %s
                 """.formatted(
                 safeCustomerId,
                 safeOrderId,
                 safeQuestion,
                 orderSnapshot,
+                cancelToolResult,
                 policyContext
         );
 
@@ -69,27 +77,15 @@ public class OrderSupportService {
         return value == null || value.isBlank() ? "unknown" : value;
     }
 
-    private String formatOrderSnapshot(OrderSnapshot snapshot) {
-        return """
-            orderId=%s,
-                customerId=%s,
-                trackingNumber=%s,
-                purchaseDate=%s,
-                expectedDeliveryDate=%s,
-                deliveredDate=%s,
-                orderTotal=%s,
-                shippingFee=%s,
-                status=%s
-                """.formatted(
-                snapshot.orderId(),
-                snapshot.customerId(),
-                snapshot.trackingNumber(),
-                snapshot.purchaseDate(),
-                snapshot.expectedDeliveryDate(),
-                snapshot.deliveredDate(),
-                snapshot.orderTotal(),
-                snapshot.shippingFee(),
-                snapshot.status()
-        );
+    private boolean shouldAttemptCancel(String question) {
+        String normalized = question.toLowerCase();
+        return normalized.contains("cancel") || normalized.contains("cancellation");
+    }
+
+    private String formatOrderToolResult(Map<String, Object> toolResult) {
+        if (toolResult == null || toolResult.isEmpty()) {
+            return "MCP getOrderStatus tool returned no data.";
+        }
+        return toolResult.toString();
     }
 }
