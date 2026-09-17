@@ -1,38 +1,8 @@
-# Intelligent AI Order Support Policy Assistant
+# Architecture
 
-A Spring Boot application that combines order data, policy documents, and an OpenAI-powered assistant to support customer service workflows.
+This document captures the system architecture of the Intelligent AI Order Support Policy Assistant using Mermaid C4 diagrams.
 
-## Overview
-
-The application:
-
-- looks up order data from MongoDB
-- ingests policy files from a local directory
-- splits policy content into searchable chunks
-- uses order context + policy context to answer support questions
-- exposes an internal MCP server for transactional order operations
-
-## Technology Stack
-
-- Java 21
-- Spring Boot 3.3.x
-- Spring Data MongoDB
-- Spring AI OpenAI Chat
-- MongoDB
-- Mermaid C4 architecture diagrams
-
-## Core Features
-
-- `POST /api/support/query` for policy-aware support responses
-- `POST /api/support/policies/ingest` for loading policy content
-- `POST /api/support/orders/seed` for seeding sample orders
-- `POST /api/mcp` for internal tool-based order access
-
-## Architecture
-
-See the dedicated architecture document: [docs/architecture.md](docs/architecture.md)
-
-### 1) System Context Diagram
+## 1) System Context Diagram
 
 ```mermaid
 C4Context
@@ -52,7 +22,7 @@ Rel(orderSupportSystem, policyDocs, "Ingests local policy files", "File system")
 Rel(orderSupportSystem, openAi, "Requests business response generation", "HTTPS")
 ```
 
-### 2) Container Diagram
+## 2) Container Diagram
 
 ```mermaid
 C4Container
@@ -84,7 +54,7 @@ Rel(api, policyDocs, "Loads files for policy ingestion", "Filesystem")
 Rel(policyDocs, mongo, "Stored as policy chunks", "Bulk ingest")
 ```
 
-### 3) Component Diagram
+## 3) Component Diagram
 
 ```mermaid
 C4Component
@@ -127,156 +97,12 @@ Rel(orderRepo, mongo, "Persists order snapshots")
 Rel(policyRepo, mongo, "Persists policy chunks")
 ```
 
-## Configuration
+## Summary
 
-The app reads the following environment variables:
+This application follows a familiar pattern for an AI-enabled support assistant:
 
-- `MONGODB_URI` (default: `mongodb://localhost:27017/orderdb`)
-- `OPENAI_API_KEY` (required for chat responses)
-- `OPENAI_MODEL` (default: `gpt-4o-mini`)
-- `SERVER_PORT` (default: `8080`)
-- `POLICY_PDF_DIRECTORY` (default: `./policies`)
-- `MCP_API_KEY` (required for calling `/api/mcp`)
-
-## Run the Application
-
-PowerShell example:
-
-```powershell
-$env:MONGODB_URI="mongodb://localhost:27017/orderdb"
-$env:OPENAI_API_KEY="your-openai-api-key"
-$env:MCP_API_KEY="your-internal-mcp-key"
-mvn spring-boot:run
-```
-
-The API is available at:
-
-- `http://localhost:8080`
-- Web UI: `http://localhost:8080/`
-
-## Load Policy Files
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/support/policies/ingest"
-```
-
-## Ask an Order Support Question
-
-```powershell
-$body = @{
-  customerId = "C-991"
-  orderId    = "O-1001"
-  question   = "My order is delayed. Can I get shipping fee refund or compensation?"
-  confirmCancellation = $false
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8080/api/support/query" `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-## Internal MCP Operations
-
-- `getOrderStatus(id)`
-- `cancelOrder(id)`
-
-Example JSON-RPC request:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "method": "tools/list",
-  "params": {}
-}
-```
-
-## Notes
-
-- The app is designed for support scenarios that require both operational order data and policy-based reasoning.
-- Default policy files are stored under the `policies/` directory.
-- Order cancellation is intentionally protected by an explicit confirmation step before a transactional action is executed.
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8080/api/mcp" `
-  -Headers $mcpHeaders `
-  -ContentType "application/json" `
-  -Body $statusBody
-```
-
-### Call cancelOrder
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "3",
-  "method": "tools/call",
-  "params": {
-    "name": "cancelOrder",
-    "arguments": {
-      "id": "O-1001"
-    }
-  }
-}
-```
-
-PowerShell call:
-
-```powershell
-$cancelBody = @{
-  jsonrpc = "2.0"
-  id      = "3"
-  method  = "tools/call"
-  params  = @{
-    name      = "cancelOrder"
-    arguments = @{ id = "O-1001" }
-  }
-} | ConvertTo-Json -Depth 8
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://localhost:8080/api/mcp" `
-  -Headers $mcpHeaders `
-  -ContentType "application/json" `
-  -Body $cancelBody
-```
-
-Notes:
-
-- The chatbot automatically invokes `getOrderStatus` for each support question.
-- If the question includes words like "cancel" or "cancellation", the chatbot also invokes `cancelOrder`.
-
-## Seed Data Included
-
-On startup, the app upserts two default records. You can also trigger the same upsert on demand:
-
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/support/orders/seed"
-```
-
-Example response:
-
-```json
-{
-  "ordersSeeded": 2
-}
-```
-
-Default records:
-
-- `customerId: C-991`, `orderId: O-1001`, status `IN_TRANSIT`
-- `customerId: C-992`, `orderId: O-1002`, status `DELIVERED`
-
-## Local Policies Included
-
-The project includes these starter policy documents:
-
-- `policies/returns-and-refunds-policy.md`
-- `policies/shipping-and-delivery-policy.md`
-- `policies/cancellations-and-modifications-policy.md`
-
-## Troubleshooting
-
-- If query answers mention missing policy context, run ingestion first.
-- If order is not found, verify `customerId` + `orderId` values or check MongoDB data in `orderdb.orders`.
-- If OpenAI calls fail, verify `OPENAI_API_KEY` and outbound internet access.
+- a user-facing API layer
+- a retrieval layer for policy documents
+- a transactional layer for order operations via MCP
+- an LLM reasoning layer for natural-language support
+a MongoDB persistence layer for both operational and knowledge data
