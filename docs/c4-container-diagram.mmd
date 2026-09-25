@@ -1,0 +1,63 @@
+flowchart LR
+    %% C4 Container Diagram - Cisco Order RAG & Transaction Processing System
+    classDef person fill:#e1f5fe,stroke:#0277bd,stroke-width:1.5px,color:#000;
+    classDef system fill:#f3e5f5,stroke:#6a1b9a,stroke-width:1.5px,color:#000;
+    classDef app fill:#e8f5e9,stroke:#2e7d32,stroke-width:1.5px,color:#000;
+    classDef data fill:#fff3e0,stroke:#ef6c00,stroke-width:1.5px,color:#000;
+    classDef ui fill:#fce4ec,stroke:#c2185b,stroke-width:1.5px,color:#000;
+    classDef ext fill:#f5f5f5,stroke:#616161,stroke-width:1.5px,color:#000;
+
+    subgraph ingestion["Ingestion Layer"]
+        uipath["UiPath Automation Bot\nUnattended RPA Engine"]
+        kafka[("Apache Kafka Cluster\nEvent Streaming (OpenShift)")]
+    end
+
+    subgraph openshift["Red Hat OpenShift Platform (Pod Boundary)"]
+        gateway["Spring Boot AI Gateway\nJava, Spring AI, Spring Security"]
+        mcp_inquiry["Remote MCP Order Inquiry Server\nHTTP JSON-RPC / MCP"]
+        mcp_processing["Remote MCP Order Processing Server\nHTTP JSON-RPC / MCP"]
+        redis[("Cluster Redis Cache\nRedis In-Memory")]
+    end
+
+    subgraph security_monitoring["Security & Observability Layer"]
+        ai_defense["Cisco AI Defense Proxy\nAI Runtime Protection"]
+        copilot["Microsoft Copilot Studio\nSaaS RAG Engine"]
+        elk["ELK Stack (Elasticsearch & Kibana)\nLog Analytics"]
+    end
+
+    subgraph backend["Core Enterprise Systems"]
+        database[("Core Order Database\nOracle DB Mesh")]
+        erp["Enterprise ERP System\nSAP / Cisco Core ERP"]
+    end
+
+    user["Cisco User / Partner\nCustomers, Agents, or Partners"]
+    msgraph["Microsoft Graph API\nMailbox webhooks"]
+    sharepoint["SharePoint Online\nPolicy repository"]
+    agent_ui["Agent Workspace UI Queue\nReact Angular Dashboard"]
+
+    user -->|"Sends Inquiry / Cancellation\nHTTPS / REST (Okta User JWT)"| gateway
+    msgraph -->|"Triggers Mailbox Webhook\nHTTPS / JSON Event"| uipath
+    uipath -->|"Publishes Extracted Order Data\nKafka Protocol (Okta M2M Header)"| kafka
+    kafka -->|"Consumes Inbound Payloads\nKafka Protocol (order-ingestion)"| gateway
+
+    gateway <-->|"Checks & Deducts Quotas\nJedis / Lettuce Protocol"| redis
+    gateway -->|"Inspects Strings / Parameters\nREST / JSON (MCP Protection)"| ai_defense
+    gateway -->|"Requests Policy Boundaries\nDirect Line API (Token Exchange)"| copilot
+    copilot -->|"Queries Vector Context Blocks\nGraph API / Semantic Search"| sharepoint
+
+    gateway <-->|"Calls MCP tools over HTTPS\nJSON-RPC 2.0 / tools/list, tools/call"| mcp_inquiry
+    gateway <-->|"Calls MCP tools over HTTPS\nJSON-RPC 2.0 / tools/list, tools/call"| mcp_processing
+
+    mcp_inquiry -->|"Executes Inquiry Tools\nJDBC / Service Layer"| database
+    mcp_processing -->|"Executes Cancellation / Workflow Tools\nEnterprise RPC / REST"| erp
+
+    gateway -->|"Parks Orders > $100k for Approval\nKafka Protocol (order-hitl-review)"| kafka
+    kafka <-->|"Streams Verification Queues\nWebsockets / Kafka"| agent_ui
+    agent_ui -->|"Pushes Operator Clearances\nKafka Protocol (order-hitl-approved)"| kafka
+
+    gateway -->|"Streams Console JSON Telemetry\nFluentd / Logstash Ingest"| elk
+
+    class user person
+    class msgraph,sharepoint ext
+    class uipath,kafka, gateway, mcp_inquiry, mcp_processing, redis, ai_defense, copilot, elk, database, erp app
+    class agent_ui ui

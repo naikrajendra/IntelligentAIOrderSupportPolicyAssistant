@@ -1,0 +1,58 @@
+@startuml
+!include <C4/C4Container>
+
+C4Container
+    title C4 Container Diagram - Cisco Order RAG & Transaction Processing System
+
+    Person(user, "Cisco User / Partner", "Customers, Agents, or Partners querying order details or requesting cancellations.")
+    System_Ext(msgraph, "Microsoft Graph API", "Exposes shared mailbox webhooks for orders@cisco.com.")
+    System_Ext(sharepoint, "SharePoint Online", "Enterprise document repository storing cancellation and refund SOP policies.")
+
+    Container_Boundary(ingestion, "Ingestion Layer") {
+        Container(uipath, "UiPath Automation Bot", "Unattended RPA Engine", "Tails mailbox via Graph API, runs OCR via Azure Document Intelligence, and fetches Okta M2M tokens.")
+        ContainerDb(kafka, "Apache Kafka Cluster", "Event Streaming (OpenShift)", "Manages asynchronous ingestion queues and Human-in-the-Loop event topics.")
+    }
+
+    Container_Boundary(openshift, "Red Hat OpenShift Platform (Pod Boundary)") {
+        Container(gateway, "Spring Boot AI Gateway", "Java, Spring AI, Spring Security", "Orchestrates LLM steps, validates Okta JWTs, enforces 50k token/hr limit via Redis, and routes calls over localhost.")
+        Container(mcp_inquiry, "MCP Order Inquiry Sidecar", "Containerized MCP Server", "Exposes order querying logic. Validates that the caller's Okta ID matches the database owner ID.")
+        Container(mcp_processing, "MCP Order Processing Sidecar", "Containerized MCP Server", "Calculates refunds and executes transactional cancellations.")
+        ContainerDb(redis, "Cluster Redis Cache", "Redis In-Memory", "Tracks shared, real-time user token counts across scaled gateway instances.")
+    }
+
+    Container_Boundary(security_monitoring, "Security & Observability Layer") {
+        Container(ai_defense, "Cisco AI Defense Proxy", "AI Runtime Protection", "Inspects prompts for injections, applies MCP argument guardrails, and redacts PII/PCI.")
+        Container(copilot, "Microsoft Copilot Studio", "SaaS RAG Engine", "Indexes SharePoint natively. Processes semantic vector search queries with tenant security trimming.")
+        Container(elk, "ELK Stack (Elasticsearch & Kibana)", "Log Analytics", "Ingests structured JSON telemetry logs to display token spend, latency, and model confidence.")
+    }
+
+    Container_Boundary(backend, "Core Enterprise Systems") {
+        ContainerDb(database, "Core Order Database", "Oracle DB Mesh", "Stores relational order entities, tracking data, and account ownership records.")
+        Container(erp, "Enterprise ERP System", "SAP / Cisco Core ERP", "Handles billing state mutations, ledger adjustments, and invoice updates.")
+    }
+
+    Container(agent_ui, "Agent Workspace UI Queue", "React Angular Dashboard", "Allows human agents to verify and approve high-value order cancellations over 100k USD.")
+
+    %% Data Flow & Interactions
+    Rel(user, gateway, "Sends Inquiry / Cancellation", "HTTPS / REST (Okta User JWT)")
+    Rel(msgraph, uipath, "Triggers Mailbox Webhook", "HTTPS / JSON Event")
+    Rel(uipath, kafka, "Publishes Extracted Order Data", "Kafka Protocol (Okta M2M Header)")
+    Rel(kafka, gateway, "Consumes Inbound Payloads", "Kafka Protocol (order-ingestion)")
+
+    Rel_Bi(gateway, redis, "Checks & Deducts Quotas", "Jedis / Lettuce Protocol")
+    Rel(gateway, ai_defense, "Inspects Strings / Parameters", "REST / JSON (MCP Protection)")
+    Rel(gateway, copilot, "Requests Policy Boundaries", "Direct Line API (Token Exchange)")
+    Rel(copilot, sharepoint, "Queries Vector Context Blocks", "Graph API / Semantic Search")
+
+    Rel_Bi(gateway, mcp_inquiry, "Invokes Inquiry Tool", "HTTP Localhost:8081")
+    Rel_Bi(gateway, mcp_processing, "Invokes Processing Tool", "HTTP Localhost:8082")
+
+    Rel(mcp_inquiry, database, "Queries Metadata & Ownership", "JDBC Connection")
+    Rel(mcp_processing, erp, "Executes Cancellation Writes", "Enterprise RPC / REST")
+
+    Rel(gateway, kafka, "Parks orders over 100k for approval", "Kafka Protocol (order-hitl-review)")
+    Rel_Bi(kafka, agent_ui, "Streams Verification Queues", "Websockets / Kafka")
+    Rel(agent_ui, kafka, "Pushes Operator Clearances", "Kafka Protocol (order-hitl-approved)")
+
+    Rel(gateway, elk, "Streams Console JSON Telemetry", "Fluentd / Logstash Ingest")
+@enduml

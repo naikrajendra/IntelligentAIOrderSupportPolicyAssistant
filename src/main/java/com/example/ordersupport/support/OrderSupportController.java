@@ -2,6 +2,7 @@ package com.example.ordersupport.support;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,17 +18,20 @@ public class OrderSupportController {
     private final OrderSupportService orderSupportService;
     private final PolicyIngestionService policyIngestionService;
     private final OrderSeedService orderSeedService;
+    private final ConversationHistoryService conversationHistoryService;
     private final String defaultPolicyDirectory;
 
     public OrderSupportController(
             OrderSupportService orderSupportService,
             PolicyIngestionService policyIngestionService,
             OrderSeedService orderSeedService,
+            ConversationHistoryService conversationHistoryService,
             @Value("${app.policies.pdf-directory}") String defaultPolicyDirectory
     ) {
         this.orderSupportService = orderSupportService;
         this.policyIngestionService = policyIngestionService;
         this.orderSeedService = orderSeedService;
+        this.conversationHistoryService = conversationHistoryService;
         this.defaultPolicyDirectory = defaultPolicyDirectory;
     }
 
@@ -35,6 +39,15 @@ public class OrderSupportController {
     public ResponseEntity<OrderSupportResponse> query(@RequestBody OrderSupportRequest request) {
         String answer = orderSupportService.generatePolicyAwareAnswer(request);
         return ResponseEntity.ok(new OrderSupportResponse(answer));
+    }
+
+    @PostMapping("/chat/end")
+    public ResponseEntity<Map<String, String>> endChat(@RequestParam String userId) {
+        boolean persisted = conversationHistoryService.persistConversationToMongo(userId);
+        return ResponseEntity.ok(Map.of(
+                "userId", userId,
+                "status", persisted ? "saved" : "no_active_conversation"
+        ));
     }
 
     @PostMapping("/policies/ingest")

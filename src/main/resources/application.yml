@@ -18,5 +18,19 @@ server:
 app:
   policies:
     pdf-directory: ${POLICY_PDF_DIRECTORY:./policies}
+  copilot:
+    orderPolicyAssistant:
+      base-url: ${COPILOT_POLICY_AGENT_BASE_URL:https://copilot.example.com}
+      api-key: ${COPILOT_POLICY_AGENT_API_KEY:}
+      model: ${COPILOT_POLICY_AGENT_MODEL:gpt-4o-mini}
+      timeout-ms: ${COPILOT_POLICY_AGENT_TIMEOUT_MS:15000}
   mcp:
     api-key: ${MCP_API_KEY:}
+    remote:
+      inquiry:
+        base-url: ${MCP_INQUIRY_BASE_URL:http://localhost:8081}
+        api-key: ${MCP_INQUIRY_API_KEY:}
+      processing:
+        base-url: ${MCP_PROCESSING_BASE_URL:http://localhost:8082}
+        api-key: ${MCP_PROCESSING_API_KEY:}
+      timeout-ms: ${MCP_TIMEOUT_MS:15000}
