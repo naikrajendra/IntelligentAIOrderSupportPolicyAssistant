@@ -37,8 +37,8 @@ public class OrderSupportController {
 
     @PostMapping("/query")
     public ResponseEntity<OrderSupportResponse> query(@RequestBody OrderSupportRequest request) {
-        String answer = orderSupportService.generatePolicyAwareAnswer(request);
-        return ResponseEntity.ok(new OrderSupportResponse(answer));
+        OrderSupportResponse response = orderSupportService.generatePolicyAwareAnswerWithMetrics(request);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/chat/end")

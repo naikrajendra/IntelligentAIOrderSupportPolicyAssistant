@@ -18,6 +18,13 @@ server:
 app:
   policies:
     pdf-directory: ${POLICY_PDF_DIRECTORY:./policies}
+  elk:
+    export:
+      enabled: ${ELK_EXPORT_ENABLED:false}
+      elasticsearch-hosts: ${ELASTICSEARCH_HOSTS:https://localhost:9200}
+      username: ${ELASTICSEARCH_USERNAME:}
+      password: ${ELASTICSEARCH_PASSWORD:}
+      index-prefix: ${ELK_INDEX_PREFIX:support-query-events}
   copilot:
     orderPolicyAssistant:
       base-url: ${COPILOT_POLICY_AGENT_BASE_URL:https://copilot.example.com}

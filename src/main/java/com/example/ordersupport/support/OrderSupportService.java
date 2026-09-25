@@ -1,5 +1,6 @@
 package com.example.ordersupport.support;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,22 +19,29 @@ public class OrderSupportService {
     private final PolicyChunkSearchService policyChunkSearchService;
     private final RedisTokenRateLimiter redisTokenRateLimiter;
     private final ConversationHistoryService conversationHistoryService;
+    private final SupportQueryEventService supportQueryEventService;
 
     public OrderSupportService(
             ChatClient.Builder chatClientBuilder,
             InternalMcpToolClient internalMcpToolClient,
             PolicyChunkSearchService policyChunkSearchService,
             RedisTokenRateLimiter redisTokenRateLimiter,
-            ConversationHistoryService conversationHistoryService
+            ConversationHistoryService conversationHistoryService,
+            SupportQueryEventService supportQueryEventService
     ) {
         this.chatClient = chatClientBuilder.build();
         this.internalMcpToolClient = internalMcpToolClient;
         this.policyChunkSearchService = policyChunkSearchService;
         this.redisTokenRateLimiter = redisTokenRateLimiter;
         this.conversationHistoryService = conversationHistoryService;
+        this.supportQueryEventService = supportQueryEventService;
     }
 
     public String generatePolicyAwareAnswer(OrderSupportRequest request) {
+        return generatePolicyAwareAnswerWithMetrics(request).answer();
+    }
+
+    public OrderSupportResponse generatePolicyAwareAnswerWithMetrics(OrderSupportRequest request) {
         String safeCustomerId = safe(request.customerId());
         String safeOrderId = safe(request.orderId());
         String safeQuestion = safe(request.question());
@@ -42,8 +50,23 @@ public class OrderSupportService {
                 || hasExplicitCancellationConfirmation(safeQuestion);
 
         if (!redisTokenRateLimiter.tryConsume(safeCustomerId, MINIMUM_ESTIMATED_TOKENS_PER_REQUEST)) {
-            return "Your usage quota is exhausted for this hour. Please try again later. "
+            String quotaMessage = "Your usage quota is exhausted for this hour. Please try again later. "
                     + "The limit is 50,000 tokens per customer per 1 hour window.";
+            SupportQueryEvent quotaEvent = buildQueryEvent(
+                    safeCustomerId,
+                    safeOrderId,
+                    safeQuestion,
+                    quotaMessage,
+                    "quota-exceeded",
+                    "customer token quota exceeded",
+                    false
+            );
+            quotaEvent.setPromptTokens(0L);
+            quotaEvent.setCompletionTokens(0L);
+            quotaEvent.setTotalTokens(0L);
+            quotaEvent.setConfidenceScore(0.0);
+            supportQueryEventService.save(quotaEvent);
+            return new OrderSupportResponse(quotaMessage, 0.0, new TokenUtilization(0L, 0L, 0L));
         }
 
         conversationHistoryService.addUserMessage(safeCustomerId, safeQuestion);
@@ -109,7 +132,61 @@ public class OrderSupportService {
                 .content();
 
         conversationHistoryService.addAssistantMessage(safeCustomerId, answer);
-        return answer;
+
+        SupportQueryEvent event = buildQueryEvent(
+                safeCustomerId,
+                safeOrderId,
+                safeQuestion,
+                answer,
+                cancellationRequested ? "cancellation" : "status-check",
+                "order status + policy guidance available",
+                true
+        );
+        supportQueryEventService.save(event);
+
+        return new OrderSupportResponse(
+                answer,
+                event.getConfidenceScore(),
+                new TokenUtilization(event.getPromptTokens(), event.getCompletionTokens(), event.getTotalTokens())
+        );
+    }
+
+    static SupportQueryEvent buildQueryEvent(
+            String customerId,
+            String orderId,
+            String question,
+            String answer,
+            String intent,
+            String rationale,
+            boolean successful
+    ) {
+        long promptTokens = estimateTokens(question + "\n" + rationale + "\n" + orderId + "\n" + customerId);
+        long completionTokens = estimateTokens(answer);
+        long totalTokens = promptTokens + completionTokens;
+        double confidenceScore = successful
+                ? Math.min(0.99, 0.65 + (Math.min(0.25, rationale.length() / 4000.0)) + (Math.min(0.10, answer.length() / 3000.0)))
+                : 0.15;
+
+        SupportQueryEvent event = new SupportQueryEvent();
+        event.setCustomerId(customerId);
+        event.setOrderId(orderId);
+        event.setQuestion(question);
+        event.setAnswer(answer);
+        event.setIntent(intent);
+        event.setStatus(successful ? "success" : "error");
+        event.setConfidenceScore(confidenceScore);
+        event.setPromptTokens(promptTokens);
+        event.setCompletionTokens(completionTokens);
+        event.setTotalTokens(totalTokens);
+        event.setCreatedAt(Instant.now());
+        return event;
+    }
+
+    private static long estimateTokens(String value) {
+        if (value == null || value.isBlank()) {
+            return 1L;
+        }
+        return Math.max(1L, Math.round(value.trim().split("\\s+").length * 1.3));
     }
 
     static String buildOptimizedConversationContext(List<ChatMessage> history) {
