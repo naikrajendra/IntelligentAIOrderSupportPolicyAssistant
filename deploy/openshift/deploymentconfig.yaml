@@ -1,0 +1,81 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: intelligent-ai-order-support
+spec:
+  replicas: 2
+  selector:
+    app: intelligent-ai-order-support
+  template:
+    metadata:
+      labels:
+        app: intelligent-ai-order-support
+    spec:
+      containers:
+        - name: app
+          image: IMAGE_NAME
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: mongodb-uri
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: openai-api-key
+            - name: COPILOT_POLICY_AGENT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: copilot-policy-agent-api-key
+            - name: MCP_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: mcp-api-key
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligent-ai-order-support
+spec:
+  selector:
+    app: intelligent-ai-order-support
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: intelligent-ai-order-support
+spec:
+  to:
+    kind: Service
+    name: intelligent-ai-order-support
+  port:
+    targetPort: 8080

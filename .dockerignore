@@ -1,0 +1,13 @@
+target/
+.git/
+.gitignore
+.vscode/
+.idea/
+**/.DS_Store
+**/node_modules/
+**/.classpath
+**/.project
+**/.settings/
+**/*.iml
+README.md
+Dockerfile
